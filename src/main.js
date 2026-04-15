@@ -20,6 +20,8 @@ import { updateLegend } from './ui/legend.js';
 import { showLoading, hideLoading, updateTitle, updateSampleCounter } from './ui/overlay.js';
 import { createVizData, getDefaultVizParams, renderVizToCanvas, getVizLegend } from './viz/viz-state.js';
 import { initVectorPanel, setVectorBbox, getVisibleLayers, getVectorOffset } from './ui/vector-panel.js';
+import { buildVegetation, updateVegetationZScale, disposeVegetation, detectForestClasses } from './scene/vegetation.js';
+import { initVegetationPanel, getVegetationParams, isVegetationEnabled } from './ui/vegetation-controls.js';
 
 // App state
 let scene, camera, controls, canvas;
@@ -50,6 +52,8 @@ let currentBbox = null;
 let currentUseBoundaryMask = false;
 let currentDataset = null;
 let currentTitle = '';
+let currentTextureCanvas = null;
+let vegetationMesh = null;
 
 // Camera presets (position vectors)
 const CAMERA_PRESETS = {
@@ -101,6 +105,12 @@ function init() {
 
   // Init vector overlay panel
   initVectorPanel({ onApplyVectors: handleApplyVectors });
+
+  // Init vegetation panel
+  initVegetationPanel({
+    onApply: handleApplyVegetation,
+    onClear: handleClearVegetation,
+  });
 
   // Init UI controls
   initControls({
@@ -332,11 +342,24 @@ async function handleGenerate({
       width = Math.round(resolution * aspect);
     }
 
+    // Decouple terrain-mesh resolution from texture resolution. The skirt
+    // builder uses a Map keyed per edge and V8 caps Maps at ~16.7M entries,
+    // so a >2048² mesh grid blows up under boundary clipping. Cap the mesh
+    // grid while keeping the drape texture at the user-requested resolution.
+    const MESH_MAX = 2048;
+    let meshW = width;
+    let meshH = height;
+    if (Math.max(width, height) > MESH_MAX) {
+      const meshScale = MESH_MAX / Math.max(width, height);
+      meshW = Math.max(64, Math.round(width * meshScale));
+      meshH = Math.max(64, Math.round(height * meshScale));
+    }
+
     // Fetch elevation and raster in parallel
     showLoading('Fetching elevation & land cover data...');
 
     const [elevationData, rasterResult] = await Promise.all([
-      fetchElevation(bbox, width, height, { mode: demMode }),
+      fetchElevation(bbox, meshW, meshH, { mode: demMode }),
       fetchRaster(dataset, bbox, width, height, selectedYear, rasterOptions),
     ]);
 
@@ -382,9 +405,16 @@ async function handleGenerate({
     }
 
     const texture = canvasToTexture(textureCanvas);
+    currentTextureCanvas = textureCanvas;
 
     // Remove old terrain
     if (terrainGroup) {
+      // Vegetation is parented to terrainGroup — drop the reference before
+      // we dispose the group; we'll rebuild it after the new terrain exists.
+      if (vegetationMesh) {
+        disposeVegetation(vegetationMesh);
+        vegetationMesh = null;
+      }
       scene.remove(terrainGroup);
       terrainGroup.traverse(child => {
         if (child.geometry) child.geometry.dispose();
@@ -407,6 +437,11 @@ async function handleGenerate({
     terrainGroup.position.y = yPos;
     updateShadowAnchor(terrainGroup);
     scene.add(terrainGroup);
+
+    // Auto-apply vegetation if the panel is enabled.
+    if (isVegetationEnabled()) {
+      handleApplyVegetation();
+    }
 
     // Build title
     const titleEl = document.getElementById('map-title');
@@ -740,9 +775,65 @@ function hexToRGBA(hex, opacity) {
 function handleZScaleChange(newZScale) {
   if (terrainGroup && currentElevationData) {
     updateTerrainZScale(terrainGroup, currentElevationData, newZScale, currentBaseDepth);
+    if (vegetationMesh) updateVegetationZScale(vegetationMesh, newZScale);
     if (activeRenderer && activeRenderer.type === 'pathtracer' && activeRenderer.reset) {
       activeRenderer.reset();
     }
+  }
+}
+
+function handleApplyVegetation() {
+  if (!terrainGroup || !currentElevationData || !currentTextureCanvas) {
+    alert('Generate the terrain first.');
+    return;
+  }
+  // Replace any existing vegetation
+  if (vegetationMesh) {
+    disposeVegetation(vegetationMesh);
+    vegetationMesh = null;
+  }
+
+  const params = getVegetationParams();
+  // Pick forest colors: panel override → dataset auto-detect → fallback.
+  let forestColors = params.forestColors;
+  if (!forestColors || !forestColors.length) {
+    const detected = detectForestClasses(currentDataset);
+    forestColors = detected.length ? detected.map(d => d.hexColor) : ['#397d49'];
+  }
+
+  const zScale = parseFloat(document.getElementById('zscale-slider').value) || 1.5;
+
+  vegetationMesh = buildVegetation({
+    rasterCanvas: currentTextureCanvas,
+    forestColors,
+    elevationData: currentElevationData,
+    zScale,
+    style: params.style,
+    density: params.density,
+    minHeight: params.minHeight,
+    maxHeight: params.maxHeight,
+    colorJitter: params.colorJitter,
+    baseColor: params.baseColor,
+    maxTrees: params.maxTrees,
+  });
+
+  if (vegetationMesh) {
+    terrainGroup.add(vegetationMesh);
+  } else {
+    alert('No forest pixels found in the current raster.');
+  }
+  if (activeRenderer && activeRenderer.type === 'pathtracer' && activeRenderer.reset) {
+    activeRenderer.reset();
+  }
+}
+
+function handleClearVegetation() {
+  if (vegetationMesh) {
+    disposeVegetation(vegetationMesh);
+    vegetationMesh = null;
+  }
+  if (activeRenderer && activeRenderer.type === 'pathtracer' && activeRenderer.reset) {
+    activeRenderer.reset();
   }
 }
 

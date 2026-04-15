@@ -996,6 +996,70 @@
       color: #e2e8f0;
     }
 
+    /* Vegetation panel — same slide-in pattern as vector panel. */
+    #vegetation-panel {
+      position: fixed; right: 0; top: 0; bottom: 0;
+      width: 320px; background: #1e293b; color: #cbd5e1;
+      border-left: 1px solid #334155; overflow-y: auto;
+      z-index: 15; transform: translateX(100%);
+      transition: transform 0.25s ease;
+      font-family: 'Inter', sans-serif; font-size: 12px;
+    }
+    #vegetation-panel.open { transform: translateX(0); }
+    #vegetation-panel-toggle {
+      position: fixed; right: 0; top: calc(50% + 90px);
+      transform: translateY(-50%); z-index: 20;
+      background: #1e293b; border: 1px solid #334155; border-right: none;
+      border-radius: 6px 0 0 6px; color: #94a3b8; cursor: pointer;
+      padding: 8px 5px; font-size: 14px;
+      writing-mode: vertical-rl; letter-spacing: 1px;
+      font-family: 'Inter', sans-serif; font-weight: 500;
+      transition: right 0.25s ease;
+    }
+    #vegetation-panel.open ~ #vegetation-panel-toggle { right: 320px; }
+    #vegetation-panel-toggle:hover { background: #334155; color: #e2e8f0; }
+    #vegetation-panel .veg-header {
+      padding: 16px 20px 12px; border-bottom: 1px solid #334155;
+      cursor: pointer;
+    }
+    #vegetation-panel .veg-header h2 { font-size: 15px; margin: 0; color: #f1f5f9; }
+    #vegetation-panel .veg-body { padding: 14px 18px 24px; }
+    #vegetation-panel.collapsed .veg-body { display: none; }
+    #vegetation-panel .veg-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 0; cursor: pointer;
+    }
+    #vegetation-panel .veg-field { margin: 10px 0; }
+    #vegetation-panel .veg-field label {
+      display: block; font-size: 11px; color: #94a3b8;
+      text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+    }
+    #vegetation-panel .veg-field select,
+    #vegetation-panel .veg-field input[type="text"],
+    #vegetation-panel .veg-field input[type="number"] {
+      width: 100%; padding: 6px 8px; border-radius: 4px;
+      background: #0f172a; color: #e2e8f0; border: 1px solid #334155;
+      font-size: 12px;
+    }
+    #vegetation-panel .veg-field input[type="range"] {
+      width: 100%; accent-color: #818cf8;
+    }
+    #vegetation-panel .veg-field input[type="color"] {
+      width: 60px; height: 28px; border: 1px solid #334155;
+      background: #0f172a; cursor: pointer; padding: 2px;
+    }
+    #vegetation-panel .veg-readout {
+      float: right; color: #f1f5f9; font-weight: 500;
+      text-transform: none; letter-spacing: 0;
+    }
+    #vegetation-panel .veg-hint {
+      font-size: 10.5px; color: #64748b; margin-top: 4px; line-height: 1.4;
+    }
+    #vegetation-panel .veg-actions {
+      display: flex; gap: 8px; margin-top: 14px;
+    }
+    #vegetation-panel .veg-actions .btn-generate { flex: 1; }
+
     .vector-panel-header {
       padding: 16px 20px 12px;
       border-bottom: 1px solid #334155;
@@ -1730,6 +1794,71 @@
     </div>
   </div>
   <button id="vector-panel-toggle">Vectors &#9654;</button>
+
+  <!-- --- Vegetation Panel (right side, sits below vectors toggle) --- -->
+  <div id="vegetation-panel">
+    <div class="veg-header">
+      <h2>3D Vegetation</h2>
+    </div>
+    <div class="veg-body">
+      <label class="veg-row">
+        <input type="checkbox" id="veg-enabled" />
+        <span>Auto-apply on Generate</span>
+      </label>
+
+      <div class="veg-field">
+        <label>Style</label>
+        <select id="veg-style">
+          <option value="cone" selected>Cones (trunk + cone canopy)</option>
+          <option value="blob">Blobs (icosphere)</option>
+          <option value="billboard">Crossed billboards</option>
+        </select>
+      </div>
+
+      <div class="veg-field">
+        <label>Density <span id="veg-density-val" class="veg-readout">25%</span></label>
+        <input type="range" id="veg-density" min="0.01" max="1" step="0.01" value="0.25" />
+      </div>
+
+      <div class="veg-field">
+        <label>Min height <span id="veg-min-height-val" class="veg-readout">0.006</span></label>
+        <input type="range" id="veg-min-height" min="0.001" max="0.05" step="0.001" value="0.006" />
+      </div>
+
+      <div class="veg-field">
+        <label>Max height <span id="veg-max-height-val" class="veg-readout">0.018</span></label>
+        <input type="range" id="veg-max-height" min="0.002" max="0.06" step="0.001" value="0.018" />
+      </div>
+
+      <div class="veg-field">
+        <label>Color jitter <span id="veg-color-jitter-val" class="veg-readout">0.18</span></label>
+        <input type="range" id="veg-color-jitter" min="0" max="1" step="0.01" value="0.18" />
+      </div>
+
+      <div class="veg-field">
+        <label>Base color</label>
+        <input type="color" id="veg-base-color" value="#2f6b3d" />
+      </div>
+
+      <div class="veg-field">
+        <label>Max trees</label>
+        <input type="number" id="veg-max-trees" value="60000" min="100" max="200000" step="1000" />
+        <div class="veg-hint">Hard cap for performance. ~60k is comfortable on most GPUs.</div>
+      </div>
+
+      <div class="veg-field">
+        <label>Forest class colors</label>
+        <input type="text" id="veg-forest-colors" placeholder="auto-detect from dataset (e.g. #397d49,#1c5f2c)" />
+        <div class="veg-hint">Optional. Comma-separated hex colors to match in the raster. Leave blank to auto-detect "Trees"/"Forest" classes.</div>
+      </div>
+
+      <div class="veg-actions">
+        <button id="btn-veg-apply" class="btn-generate">Apply Vegetation</button>
+        <button id="btn-veg-clear" class="icon-btn">Clear</button>
+      </div>
+    </div>
+  </div>
+  <button id="vegetation-panel-toggle">Trees &#9654;</button>
 
   <div id="satellite-modal" aria-hidden="true">
     <div class="satellite-modal-card" role="dialog" aria-modal="true" aria-labelledby="satellite-modal-title">
