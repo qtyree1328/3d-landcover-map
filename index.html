@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Land Cover Map</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+    }
+
+    /* --- Side Panel --- */
+    #panel {
+      width: 400px;
+      min-width: 400px;
+      height: 100vh;
+      overflow-y: auto;
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #334155;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    }
+
+    .panel-header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: -0.3px;
+    }
+
+    .panel-header .subtitle {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    /* --- Source Mode Toggle --- */
+    .source-mode-section {
+      padding: 16px 24px;
+      border-bottom: 1px solid #334155;
+      background: rgba(99, 102, 241, 0.04);
+    }
+
+    .source-mode-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .source-mode-toggle {
+      display: flex;
+      gap: 8px;
+    }
+
+    .source-mode-btn {
+      flex: 1;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .source-mode-btn:hover {
+      border-color: #64748b;
+      color: #cbd5e1;
+    }
+
+    .source-mode-btn.active {
+      border-color: #6366f1;
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.15);
+    }
+
+    /* --- Step Sections --- */
+    .step {
+      border-bottom: 1px solid #334155;
+    }
+
+    .step.hidden-step {
+      display: none;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 24px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .step-header:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #334155;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .step.active .step-number {
+      background: #6366f1;
+      color: #fff;
+    }
+
+    .step.completed .step-number {
+      background: #059669;
+      color: #fff;
+    }
+
+    .step.disabled .step-number {
+      background: #1e293b;
+      color: #475569;
+    }
+
+    .step-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cbd5e1;
+      flex: 1;
+    }
+
+    .step.active .step-title {
+      color: #f1f5f9;
+    }
+
+    .step.disabled .step-title {
+      color: #475569;
+    }
+
+    .step-chevron {
+      color: #475569;
+      font-size: 12px;
+      transition: transform 0.2s;
+    }
+
+    .step.open .step-chevron {
+      transform: rotate(90deg);
+    }
+
+    .step-body {
+      display: none;
+      padding: 0 24px 20px;
+    }
+
+    .step.open .step-body {
+      display: block;
+    }
+
+    .step.disabled .step-header {
+      cursor: default;
+    }
+
+    .step.disabled .step-header:hover {
+      background: none;
+    }
+
+    .step-badge {
+      font-size: 9px;
+      font-weight: 500;
+      color: #475569;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-left: 6px;
+    }
+
+    /* --- Form Fields --- */
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .field input[type="text"],
+    .field input[type="date"],
+    .field input[type="number"],
+    .field select {
+      width: 100%;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .field input[type="text"]:focus,
+    .field input[type="date"]:focus,
+    .field input[type="number"]:focus,
+    .field select:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    .field input::placeholder {
+      color: #475569;
+    }
+
+    /* --- Search --- */
+    .search-wrapper {
+      position: relative;
+    }
+
+    #search-results {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      max-height: 220px;
+      overflow-y: auto;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    #search-results .result-item {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      border-bottom: 1px solid #334155;
+      transition: background 0.1s;
+    }
+
+    #search-results .result-item:last-child {
+      border-bottom: none;
+    }
+
+    #search-results .result-item:hover {
+      background: #334155;
+    }
+
+    #search-results .result-item .result-name {
+      color: #e2e8f0;
+    }
+
+    #search-results .result-item .result-type {
+      color: #64748b;
+      font-size: 10px;
+      margin-left: 6px;
+      background: #0f172a;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* Search status */
+    #search-status {
+      font-size: 11px;
+      margin-top: 6px;
+      min-height: 16px;
+    }
+
+    .status-success { color: #34d399; }
+    .status-warn { color: #fbbf24; }
+    .status-error { color: #f87171; }
+    .status-loading { color: #94a3b8; }
+
+    /* --- Leaflet Map --- */
+    .map-preview {
+      width: 100%;
+      height: 220px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      overflow: hidden;
+      background: #0f172a;
+      margin-top: 4px;
+    }
+
+    /* Override leaflet styles for dark theme */
+    .map-preview .leaflet-control-zoom a {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-color: #334155;
+    }
+
+    .map-preview .leaflet-control-zoom a:hover {
+      background: #334155;
+    }
+
+    /* --- Inline Row --- */
+    .inline-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .inline-row .field {
+      flex: 1;
+    }
+
+    /* --- Dataset Mode --- */
+    .dataset-mode-toggle {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dataset-mode-btn {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .dataset-mode-btn:hover {
+      border-color: #64748b;
+      color: #cbd5e1;
+    }
+
+    .dataset-mode-btn.active {
+      border-color: #6366f1;
+      color: #c7d2fe;
+      background: rgba(99, 102, 241, 0.15);
+    }
+
+    #satellite-dataset-fields {
+      display: none;
+    }
+
+    #btn-open-satellite-selector {
+      width: 100%;
+      margin-top: 2px;
+    }
+
+    #satellite-selection-info {
+      margin-top: 8px;
+      min-height: 16px;
+    }
+
+    #satellite-date-field.hidden,
+    #satellite-range-field.hidden,
+    #satellite-month-field.hidden,
+    #btn-open-satellite-selector.hidden,
+    #satellite-selection-info.hidden,
+    #satellite-cloud-field.hidden,
+    #custom-manual-bounds-row.hidden,
+    #upload-boundary-fields.hidden,
+    #location-search-fields.hidden,
+    #location-geojson-fields.hidden {
+      display: none;
+    }
+
+    /* --- Slider --- */
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: #6366f1;
+      height: 4px;
+    }
+
+    .slider-row .slider-val {
+      font-size: 12px;
+      font-weight: 600;
+      color: #a5b4fc;
+      min-width: 36px;
+      text-align: right;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    /* --- Buttons --- */
+    .btn-generate {
+      width: 100%;
+      padding: 11px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+    }
+
+    .btn-generate:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
+    .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-secondary {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: #0f172a;
+      color: #cbd5e1;
+    }
+
+    .btn-secondary:hover { background: #334155; border-color: #64748b; }
+
+    /* --- Camera Presets --- */
+    .camera-presets {
+      display: flex;
+      gap: 6px;
+    }
+
+    .camera-presets button {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .camera-presets button:hover {
+      background: #334155;
+      color: #e2e8f0;
+    }
+
+    /* --- Render Toggle --- */
+    .render-toggle {
+      display: flex;
+      background: #0f172a;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    .render-toggle button {
+      flex: 1;
+      background: none;
+      border: none;
+      color: #64748b;
+      padding: 8px 14px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .render-toggle button.active {
+      background: #6366f1;
+      color: #fff;
+    }
+
+    /* --- Toggle Row --- */
+    .toggle-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      flex: 1;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .icon-btn:hover { background: #334155; }
+    .icon-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+    #btn-export {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    #btn-export:hover { background: #334155; }
+
+    /* --- Boundary Method Row --- */
+    .method-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .method-btn {
+      flex: 1;
+      padding: 6px 4px;
+      font-size: 10px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #64748b;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+
+    .method-btn:hover { border-color: #64748b; color: #94a3b8; }
+    .method-btn.active { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.1); }
+
+    .hint {
+      font-size: 10px;
+      color: #475569;
+      margin-top: 6px;
+    }
+
+    /* --- 3D Viewport --- */
+    #viewport {
+      flex: 1;
+      position: relative;
+      background: #ffffff;
+      min-width: 0;
+    }
+
+    #viewport canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* --- Title Overlay --- */
+    #title-overlay {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 5;
+      text-align: center;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    #title-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    #title-overlay h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #222;
+      margin: 0;
+    }
+
+    #title-overlay .subtitle {
+      font-size: 12px;
+      font-weight: 300;
+      color: #888;
+      margin-top: 3px;
+    }
+
+    /* --- Legend --- */
+    #legend {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      z-index: 5;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 14px 18px;
+      min-width: 150px;
+      display: none;
+      transition: opacity 0.3s;
+      cursor: grab;
+    }
+
+    #legend.hidden { opacity: 0; pointer-events: none; }
+    #legend.dragging { cursor: grabbing; }
+    #legend h3 { font-size: 12px; font-weight: 600; color: #444; margin-bottom: 8px; }
+    #legend .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+    #legend .legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); flex-shrink: 0; }
+    #legend .legend-label { font-size: 11px; color: #555; }
+    #legend .gradient-bar { width: 18px; height: 110px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12); }
+    #legend .gradient-container { display: flex; gap: 7px; }
+    #legend .gradient-labels { display: flex; flex-direction: column; justify-content: space-between; font-size: 10px; color: #777; }
+
+    /* --- Attribution --- */
+    #attribution {
+      position: absolute;
+      bottom: 6px;
+      right: 10px;
+      font-size: 9px;
+      font-weight: 300;
+      color: #aaa;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    /* --- Loading Overlay --- */
+    #loading {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: rgba(255, 255, 255, 0.88);
+    }
+
+    #loading.visible { display: flex; }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #loading .loading-text {
+      margin-top: 14px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    /* --- Sample Counter --- */
+    #sample-counter {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 5;
+      font-size: 11px;
+      color: #999;
+      display: none;
+    }
+
+    /* --- Satellite Modal --- */
+    #satellite-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(2, 6, 23, 0.72);
+      backdrop-filter: blur(2px);
+      z-index: 40;
+    }
+
+    #satellite-modal.open {
+      display: flex;
+    }
+
+    .satellite-modal-card {
+      width: min(1080px, 96vw);
+      max-height: 90vh;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.5);
+    }
+
+    .satellite-modal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #334155;
+      background: #111827;
+    }
+
+    .satellite-modal-header h2 {
+      font-size: 15px;
+      color: #f1f5f9;
+      margin: 0;
+    }
+
+    #satellite-modal-summary {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+
+    .satellite-modal-close {
+      border: 1px solid #475569;
+      border-radius: 6px;
+      background: #0f172a;
+      color: #cbd5e1;
+      font-size: 11px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .satellite-modal-close:hover {
+      background: #1e293b;
+    }
+
+    #satellite-modal-status {
+      font-size: 12px;
+      color: #94a3b8;
+      padding: 10px 16px;
+      border-bottom: 1px solid #1f2937;
+      min-height: 36px;
+    }
+
+    #satellite-results {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      background: #020617;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+
+    .sat-empty {
+      grid-column: 1 / -1;
+      font-size: 12px;
+      color: #64748b;
+      padding: 10px 4px;
+    }
+
+    .sat-image-card {
+      border: 1px solid #334155;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #0b1220;
+      cursor: pointer;
+      transition: border-color 0.12s, transform 0.12s;
+      text-align: left;
+      color: inherit;
+      padding: 0;
+    }
+
+    .sat-image-card:hover {
+      border-color: #6366f1;
+      transform: translateY(-1px);
+    }
+
+    .sat-image-card.selected {
+      border-color: #818cf8;
+      box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7);
+    }
+
+    .sat-preview {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #0f172a;
+      border-bottom: 1px solid #1f2937;
+      position: relative;
+      display: block;
+    }
+
+    .sat-preview canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .sat-preview-label {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      font-size: 10px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(71, 85, 105, 0.7);
+      color: #cbd5e1;
+      border-radius: 4px;
+      padding: 2px 6px;
+    }
+
+    .sat-meta {
+      padding: 9px 10px 10px;
+    }
+
+    .sat-meta-row {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    .sat-meta-row:last-child {
+      margin-bottom: 0;
+      color: #64748b;
+    }
+
+    .satellite-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #334155;
+      background: #111827;
+    }
+
+    .satellite-modal-footer .btn-secondary {
+      min-width: 120px;
+    }
+
+    .satellite-modal-footer .btn-generate {
+      width: auto;
+      min-width: 200px;
+      padding: 9px 14px;
+    }
+
+    @media (max-width: 900px) {
+      #satellite-results {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      }
+    }
+
+    /* --- Panel Scrollbar --- */
+    .panel-body::-webkit-scrollbar { width: 5px; }
+    .panel-body::-webkit-scrollbar-track { background: transparent; }
+    .panel-body::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    /* --- Viz Controls --- */
+    .viz-class-entry {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .viz-class-entry input[type="color"] {
+      width: 32px;
+      height: 28px;
+      padding: 1px;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      background: #0f172a;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .viz-class-entry input[type="text"] {
+      flex: 1;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      outline: none;
+      min-width: 0;
+    }
+
+    .viz-class-entry input[type="text"]:focus {
+      border-color: #6366f1;
+    }
+
+    .viz-class-value {
+      font-size: 10px;
+      color: #64748b;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      min-width: 24px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    #viz-class-list {
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    /* --- Vector Panel (right side) --- */
+    #vector-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 360px;
+      height: 100vh;
+      overflow: hidden;
+      background: #1e293b;
+      border-left: 1px solid #334155;
+      display: flex;
+      flex-direction: column;
+      z-index: 15;
+      transform: translateX(100%);
+      transition: transform 0.25s ease;
+    }
+
+    #vector-panel.open {
+      transform: translateX(0);
+    }
+
+    #vector-panel-toggle {
+      position: fixed;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 20;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-right: none;
+      border-radius: 6px 0 0 6px;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 8px 5px;
+      font-size: 14px;
+      writing-mode: vertical-rl;
+      letter-spacing: 1px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      transition: right 0.25s ease;
+    }
+
+    #vector-panel.open ~ #vector-panel-toggle {
+      right: 360px;
+    }
+
+    #vector-panel-toggle:hover {
+      background: #334155;
+      color: #e2e8f0;
+    }
+
+    .vector-panel-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .vector-panel-header h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .vector-panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 20px;
+    }
+
+    .vector-section {
+      margin-bottom: 16px;
+    }
+
+    .vector-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .vector-layer-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid #334155;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .vector-layer-item .layer-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .vector-layer-item .layer-color {
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      border: 1px solid #475569;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+    }
+
+    .vector-layer-item .layer-name {
+      flex: 1;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .vector-layer-item .layer-style-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .vector-layer-item .layer-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .vector-layer-item .layer-actions button {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 2px 4px;
+      font-size: 12px;
+      border-radius: 3px;
+    }
+
+    .vector-layer-item .layer-actions button:hover {
+      color: #e2e8f0;
+      background: rgba(255,255,255,0.08);
+    }
+
+    .vector-style-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .vector-style-row label {
+      font-size: 11px;
+      color: #94a3b8;
+      min-width: 50px;
+    }
+
+    .vector-style-row input[type="number"] {
+      width: 60px;
+    }
+
+    #osm-filter-tags {
+      width: 100%;
+      font-size: 12px;
+      padding: 6px 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    #osm-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    #osm-presets button {
+      font-size: 10px;
+      padding: 3px 8px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid #4f46e5;
+      border-radius: 4px;
+      color: #a5b4fc;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+
+    #osm-presets button:hover {
+      background: rgba(99, 102, 241, 0.25);
+    }
+
+    #btn-fetch-osm {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    #esri-feature-presets button {
+      font-size: 10px;
+      padding: 3px 8px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid #059669;
+      border-radius: 4px;
+      color: #6ee7b7;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+
+    #esri-feature-presets button:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    #vector-layer-list:empty::before {
+      content: 'No layers added yet.';
+      color: #475569;
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    /* --- Responsive --- */
+    @media (max-width: 900px) {
+      #panel { width: 340px; min-width: 340px; }
+      #vector-panel.open { width: 300px; min-width: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- --- Side Panel --- -->
+  <div id="panel">
+    <div class="panel-header">
+      <h1>3D Land Cover</h1>
+      <div class="subtitle">Interactive terrain visualization</div>
+    </div>
+
+    <div class="panel-body">
+      <!-- Source Mode Toggle -->
+      <div class="source-mode-section">
+        <label>Data Source</label>
+        <div class="source-mode-toggle" id="source-mode-toggle">
+          <button class="source-mode-btn active" data-source="api" type="button">API Data</button>
+          <button class="source-mode-btn" data-source="upload" type="button">Upload Raster</button>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- UPLOAD PATH: Step 1 - Upload & Configure     -->
+      <!-- ============================================ -->
+      <div class="step source-upload hidden-step" data-step="upload-config">
+        <div class="step-header">
+          <div class="step-number">1</div>
+          <div class="step-title">Upload & Configure</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Raster File</label>
+            <input type="file" id="custom-raster-input" accept=".tif,.tiff,image/*" />
+            <div class="hint">GeoTIFF extracts bounds automatically when georeferencing exists.</div>
+            <div class="hint" id="custom-raster-status">No raster uploaded.</div>
+          </div>
+          <div class="field">
+            <label>Bounds</label>
+            <select id="custom-bounds-mode-select">
+              <option value="raster" selected>Use Raster Bounds</option>
+              <option value="custom">Custom Boundary (Search)</option>
+              <option value="manual">Manual Bounds Entry</option>
+            </select>
+          </div>
+          <!-- Custom boundary search fields (shown when bounds = custom) -->
+          <div id="upload-boundary-fields" class="hidden">
+            <div class="field">
+              <label>Search Location</label>
+              <div class="search-wrapper">
+                <input type="text" id="upload-search-input" placeholder="City, region, park, coordinates..." autocomplete="off" />
+                <div id="upload-search-results"></div>
+              </div>
+              <div id="upload-search-status"></div>
+            </div>
+            <div class="field">
+              <label>Boundary Method</label>
+              <div class="method-row" id="upload-method-row">
+                <button class="method-btn active" data-method="nominatim" title="OpenStreetMap Nominatim search">Nominatim</button>
+                <button class="method-btn" data-method="overpass" title="Overpass API for admin boundaries">Overpass</button>
+                <button class="method-btn" data-method="osmfr" title="OSM.fr pre-processed polygons">OSM.fr</button>
+              </div>
+              <div class="hint">Try different methods if boundaries look wrong</div>
+            </div>
+            <div class="map-preview" id="upload-map-preview"></div>
+          </div>
+          <!-- Manual bounds fields -->
+          <div class="inline-row hidden" id="custom-manual-bounds-row">
+            <div class="field">
+              <label>X Min (lon)</label>
+              <input type="number" id="custom-bounds-xmin" step="any" placeholder="-111.15" />
+            </div>
+            <div class="field">
+              <label>Y Min (lat)</label>
+              <input type="number" id="custom-bounds-ymin" step="any" placeholder="44.13" />
+            </div>
+            <div class="field">
+              <label>X Max (lon)</label>
+              <input type="number" id="custom-bounds-xmax" step="any" placeholder="-109.82" />
+            </div>
+            <div class="field">
+              <label>Y Max (lat)</label>
+              <input type="number" id="custom-bounds-ymax" step="any" placeholder="45.10" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- API PATH: Step 1 - Find Location             -->
+      <!-- ============================================ -->
+      <div class="step source-api active open" data-step="find-location">
+        <div class="step-header">
+          <div class="step-number">1</div>
+          <div class="step-title">Find Location</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Location Source</label>
+            <div class="method-row" id="location-source-row">
+              <button class="method-btn active" data-source="search" title="Search by name or coordinates">Search</button>
+              <button class="method-btn" data-source="geojson" title="Upload a GeoJSON file">Upload GeoJSON</button>
+            </div>
+          </div>
+          <div id="location-search-fields">
+            <div class="field">
+              <label>Search</label>
+              <div class="search-wrapper">
+                <input type="text" id="search-input" placeholder="City, region, park, coordinates..." autocomplete="off" />
+                <div id="search-results"></div>
+              </div>
+              <div id="search-status"></div>
+            </div>
+            <div class="field">
+              <label>Boundary Method</label>
+              <div class="method-row" id="api-method-row">
+                <button class="method-btn active" data-method="nominatim" title="OpenStreetMap Nominatim search">Nominatim</button>
+                <button class="method-btn" data-method="overpass" title="Overpass API for admin boundaries">Overpass</button>
+                <button class="method-btn" data-method="osmfr" title="OSM.fr pre-processed polygons">OSM.fr</button>
+              </div>
+              <div class="hint">Try different methods if boundaries look wrong</div>
+            </div>
+          </div>
+          <div id="location-geojson-fields" class="hidden">
+            <div class="field">
+              <label>GeoJSON File</label>
+              <input type="file" id="geojson-upload-input" accept=".geojson,.json" />
+              <div class="hint">Upload a .geojson or .json file with a Polygon, MultiPolygon, or FeatureCollection.</div>
+              <div id="geojson-upload-status"></div>
+            </div>
+          </div>
+          <div class="map-preview" id="map-preview"></div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- API PATH: Step 2 - Choose Dataset            -->
+      <!-- ============================================ -->
+      <div class="step source-api hidden-step" data-step="choose-dataset">
+        <div class="step-header">
+          <div class="step-number">2</div>
+          <div class="step-title">Choose Dataset</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Data Type</label>
+            <div class="dataset-mode-toggle" id="dataset-mode-toggle">
+              <button class="dataset-mode-btn active" data-mode="annual" type="button">Annual Landcover</button>
+            </div>
+          </div>
+          <div id="annual-dataset-fields">
+            <div class="field">
+              <label>Dataset</label>
+              <select id="dataset-select"></select>
+            </div>
+            <div class="field" id="annual-year-field">
+              <label>Year</label>
+              <select id="year-select"></select>
+            </div>
+          </div>
+          <div id="satellite-dataset-fields" style="display:none" hidden>
+            <div class="field">
+              <label>Imagery Dataset</label>
+              <select id="satellite-dataset-select"></select>
+            </div>
+            <div class="field" id="satellite-date-field">
+              <label>Center Date</label>
+              <input type="date" id="satellite-date-input" />
+            </div>
+            <div class="field" id="satellite-range-field">
+              <label>Composite Window</label>
+              <select id="satellite-range-select">
+                <option value="30">30 days</option>
+                <option value="60">60 days</option>
+                <option value="90" selected>90 days</option>
+                <option value="180">180 days (6 months)</option>
+                <option value="365">365 days (1 year)</option>
+              </select>
+              <div class="hint">Wider windows = more images = fewer gaps. Cloud-masked median composite ensures clean output.</div>
+            </div>
+            <div class="field hidden" id="satellite-month-field">
+              <label>Year</label>
+              <input type="month" id="satellite-month-input" />
+              <div class="hint">NAIP: mosaics all aerial imagery for the selected year.</div>
+            </div>
+            <div class="hint" id="satellite-window-info"></div>
+            <div class="field">
+              <label>Visualization</label>
+              <select id="satellite-vis-select">
+                <option value="rgb" selected>RGB</option>
+                <option value="ndvi">NDVI</option>
+              </select>
+            </div>
+            <!-- RGB band & color controls -->
+            <div id="satellite-rgb-controls">
+              <div class="inline-row">
+                <div class="field">
+                  <label>R Band</label>
+                  <select id="sat-band-r"></select>
+                </div>
+                <div class="field">
+                  <label>G Band</label>
+                  <select id="sat-band-g"></select>
+                </div>
+                <div class="field">
+                  <label>B Band</label>
+                  <select id="sat-band-b"></select>
+                </div>
+              </div>
+              <div class="inline-row">
+                <div class="field">
+                  <label>R Color</label>
+                  <input type="color" id="sat-color-r" value="#ff0000" />
+                </div>
+                <div class="field">
+                  <label>G Color</label>
+                  <input type="color" id="sat-color-g" value="#00ff00" />
+                </div>
+                <div class="field">
+                  <label>B Color</label>
+                  <input type="color" id="sat-color-b" value="#0000ff" />
+                </div>
+              </div>
+            </div>
+            <!-- NDVI palette control -->
+            <div id="satellite-ndvi-controls" style="display:none">
+              <div class="field">
+                <label>Color Ramp</label>
+                <select id="sat-ndvi-palette"></select>
+                <div id="sat-ndvi-palette-preview" style="height:14px;border-radius:4px;margin-top:5px;border:1px solid #334155;"></div>
+              </div>
+            </div>
+            <div class="inline-row">
+              <div class="field" id="satellite-cloud-field">
+                <label>Max Cloud (%)</label>
+                <input type="number" id="satellite-cloud-input" min="0" max="100" step="1" value="30" />
+              </div>
+              <div class="field">
+                <label>Sort</label>
+                <select id="satellite-sort-select">
+                  <option value="date_desc" selected>Newest first</option>
+                  <option value="date_asc">Oldest first</option>
+                  <option value="cloud_asc">Least cloud first</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Max Tiles</label>
+                <input type="number" id="satellite-max-results" min="1" max="60" step="1" value="24" />
+              </div>
+            </div>
+            <button class="btn-secondary" id="btn-open-satellite-selector" type="button">Preview Tiles (Optional)</button>
+            <div class="hint" id="satellite-selection-info">Compositing uses date/cloud filters. Tile preview selection is optional.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- SHARED: Terrain DEM + Generate                -->
+      <!-- ============================================ -->
+      <div class="step" data-step="dem">
+        <div class="step-header">
+          <div class="step-number">3</div>
+          <div class="step-title">Terrain DEM</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Raster Resolution</label>
+            <select id="resolution-select">
+              <option value="auto" selected>Auto (max for dataset)</option>
+              <option value="512">512 px (fast preview)</option>
+              <option value="1024">1024 px</option>
+              <option value="2048">2048 px</option>
+              <option value="4096">4096 px (tile sources only)</option>
+            </select>
+            <div class="hint" id="resolution-hint">Auto defaults to highest resolution each dataset supports.</div>
+          </div>
+          <div class="field">
+            <label>DEM Source</label>
+            <select id="dem-source-select">
+              <option value="auto" selected>Auto (best available)</option>
+              <option value="usgs-3dep">USGS 3DEP (US only, 1m–10m)</option>
+              <option value="terrarium">AWS Terrarium Tiles (global)</option>
+            </select>
+            <div class="hint" id="dem-source-hint">Auto uses USGS 3DEP inside the US, otherwise AWS Terrarium. Both are free and require no API key.</div>
+          </div>
+          <div class="field">
+            <label>Upload DEM <span class="step-badge">Coming Soon</span></label>
+            <input type="file" disabled accept=".tif,.tiff,.geotiff" style="opacity:0.5;cursor:not-allowed" />
+            <div class="hint">Custom DEM upload will be available in a future update.</div>
+          </div>
+          <button class="btn-generate source-upload-btn" id="btn-generate-upload">Generate 3D Map</button>
+          <button class="btn-generate source-api-btn" id="btn-generate" style="display:none">Generate 3D Map</button>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- SHARED: Visualization                        -->
+      <!-- ============================================ -->
+      <div class="step" data-step="visualization">
+        <div class="step-header">
+          <div class="step-number">3</div>
+          <div class="step-title">Visualization</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field" id="viz-info-field">
+            <label>Raster Info</label>
+            <div id="viz-raster-info" class="hint">Generate a map first to configure visualization.</div>
+          </div>
+          <div class="field">
+            <label>Visualization Mode</label>
+            <select id="viz-mode-select">
+              <option value="rgb">RGB Composite</option>
+              <option value="single-band">Single Band + Palette</option>
+              <option value="classified">Classified</option>
+            </select>
+          </div>
+          <div id="viz-rgb-controls" style="display:none">
+            <div class="inline-row">
+              <div class="field">
+                <label>Red</label>
+                <select id="viz-band-r"></select>
+              </div>
+              <div class="field">
+                <label>Green</label>
+                <select id="viz-band-g"></select>
+              </div>
+              <div class="field">
+                <label>Blue</label>
+                <select id="viz-band-b"></select>
+              </div>
+            </div>
+          </div>
+          <div id="viz-singleband-controls" style="display:none">
+            <div class="field">
+              <label>Band</label>
+              <select id="viz-singleband-select"></select>
+            </div>
+            <div class="field">
+              <label>Palette</label>
+              <select id="viz-palette-select"></select>
+              <div id="viz-palette-preview" style="height:14px;border-radius:4px;margin-top:5px;border:1px solid #334155;"></div>
+            </div>
+            <div class="inline-row">
+              <div class="field">
+                <label>Min</label>
+                <input type="number" id="viz-stretch-min" step="any" />
+              </div>
+              <div class="field">
+                <label>Max</label>
+                <input type="number" id="viz-stretch-max" step="any" />
+              </div>
+            </div>
+          </div>
+          <div id="viz-classified-controls" style="display:none">
+            <div class="field">
+              <label>Class Colors</label>
+              <div id="viz-class-list"></div>
+            </div>
+          </div>
+          <button class="btn-generate" id="btn-apply-viz" style="margin-top:12px">Apply Visualization</button>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- SHARED: Adjust View                          -->
+      <!-- ============================================ -->
+      <div class="step" data-step="adjust-view">
+        <div class="step-header">
+          <div class="step-number">4</div>
+          <div class="step-title">Adjust View</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Z Scale</label>
+            <div class="slider-row">
+              <input type="range" id="zscale-slider" min="0" max="10" step="0.1" value="2.0" />
+              <span class="slider-val" id="zscale-val">2.0</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Base Depth</label>
+            <div class="slider-row">
+              <input type="range" id="basedepth-slider" min="0" max="0.5" step="0.001" value="0.15" />
+              <span class="slider-val" id="basedepth-val">0.15</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Y Position (Height)</label>
+            <div class="slider-row">
+              <input type="range" id="yposition-slider" min="-0.5" max="1.0" step="0.01" value="0" />
+              <span class="slider-val" id="yposition-val">0.00</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Shadow Offset X</label>
+            <div class="slider-row">
+              <input type="range" id="shadow-x-slider" min="-0.5" max="0.5" step="0.01" value="0.08" />
+              <span class="slider-val" id="shadow-x-val">0.08</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Shadow Offset Z</label>
+            <div class="slider-row">
+              <input type="range" id="shadow-z-slider" min="-0.5" max="0.5" step="0.01" value="-0.06" />
+              <span class="slider-val" id="shadow-z-val">-0.06</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Camera Preset</label>
+            <div class="camera-presets">
+              <button data-preset="oblique">Oblique</button>
+              <button data-preset="top">Top</button>
+              <button data-preset="front">Front</button>
+              <button data-preset="side">Side</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================ -->
+      <!-- SHARED: Export                                -->
+      <!-- ============================================ -->
+      <div class="step" data-step="export">
+        <div class="step-header">
+          <div class="step-number">5</div>
+          <div class="step-title">Render & Export</div>
+          <div class="step-chevron">&#9654;</div>
+        </div>
+        <div class="step-body">
+          <div class="field">
+            <label>Render Mode</label>
+            <div class="render-toggle">
+              <button id="btn-rasterizer" class="active">Rasterizer</button>
+              <button id="btn-pathtracer">Path Tracer</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Overlays</label>
+            <div class="toggle-row">
+              <button class="icon-btn active" id="btn-toggle-title">Title</button>
+              <button class="icon-btn active" id="btn-toggle-legend">Legend</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Export Scale</label>
+            <select id="export-scale">
+              <option value="1">1&times; (viewport)</option>
+              <option value="2" selected>2&times; (Retina)</option>
+              <option value="3">3&times;</option>
+              <option value="4">4&times; (max)</option>
+            </select>
+            <div class="hint">Higher scales render a larger PNG but are capped at 8192 px.</div>
+          </div>
+          <button id="btn-export">Export PNG</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- --- 3D Viewport --- -->
+  <div id="viewport">
+    <div id="title-overlay">
+      <h1 id="map-title">3D Land Cover Map</h1>
+      <div class="subtitle" id="map-subtitle">Select a location and dataset to begin</div>
+    </div>
+
+    <div id="legend"></div>
+
+    <div id="attribution">
+      Elevation: AWS Terrarium &amp; USGS 3DEP | Land Cover: ESRI Sentinel-2 | Inspired by Milos Popovic
+    </div>
+
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text" id="loading-text">Loading terrain...</div>
+    </div>
+
+    <div id="sample-counter"></div>
+  </div>
+
+  <!-- --- Vector Overlay Panel (right side) --- -->
+  <div id="vector-panel">
+    <div class="vector-panel-header">
+      <h2>Vector Overlays</h2>
+      <button id="btn-close-vector-panel" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;">&times;</button>
+    </div>
+    <div class="vector-panel-body">
+      <!-- Upload GeoJSON -->
+      <div class="vector-section">
+        <div class="vector-section-title">Upload GeoJSON</div>
+        <input type="file" id="vector-upload" accept=".geojson,.json" style="font-size:12px;margin-bottom:6px;" />
+      </div>
+
+      <!-- OSM Data -->
+      <div class="vector-section">
+        <div class="vector-section-title">OpenStreetMap Features</div>
+        <div class="field" style="margin-bottom:4px;">
+          <input type="text" id="osm-filter-tags" placeholder='e.g. building, highway=primary, natural=water' />
+        </div>
+        <div id="osm-presets">
+          <button data-tag="building">Buildings</button>
+          <button data-tag="highway">Roads</button>
+          <button data-tag="natural=water">Water</button>
+          <button data-tag="waterway">Waterways</button>
+          <button data-tag="landuse=forest">Forest</button>
+          <button data-tag="railway">Railways</button>
+          <button data-tag="amenity">Amenities</button>
+          <button data-tag="boundary=administrative">Boundaries</button>
+        </div>
+        <button class="btn-generate" id="btn-fetch-osm">Fetch OSM Data</button>
+      </div>
+
+      <!-- ESRI Feature Services -->
+      <div class="vector-section">
+        <div class="vector-section-title">ESRI Feature Services</div>
+        <div id="esri-feature-presets" style="display:flex;flex-wrap:wrap;gap:4px;">
+          <button data-service="water-bodies" data-label="Water Bodies">Water Bodies</button>
+          <button data-service="rivers" data-label="Rivers/Streams">Rivers/Streams</button>
+          <button data-service="parks" data-label="Parks">Parks</button>
+          <button data-service="counties" data-label="Counties">Counties</button>
+          <button data-service="federal-lands" data-label="Federal Lands">Federal Lands</button>
+          <button data-service="countries" data-label="Countries">Countries</button>
+        </div>
+      </div>
+
+      <!-- Active Layers -->
+      <div class="vector-section">
+        <div class="vector-section-title">Layers</div>
+        <div id="vector-layer-list"></div>
+      </div>
+
+      <!-- Alignment offset -->
+      <div class="vector-section">
+        <div class="vector-section-title">Alignment Offset (px)</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <label style="font-size:11px;color:#94a3b8;">X</label>
+          <input type="range" id="vector-offset-x" min="-20" max="20" value="0" step="0.5" style="flex:1;height:14px;accent-color:#6366f1;" />
+          <span id="vector-offset-x-val" style="font-size:11px;color:#e2e8f0;min-width:28px;text-align:right;">0</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+          <label style="font-size:11px;color:#94a3b8;">Y</label>
+          <input type="range" id="vector-offset-y" min="-20" max="20" value="0" step="0.5" style="flex:1;height:14px;accent-color:#6366f1;" />
+          <span id="vector-offset-y-val" style="font-size:11px;color:#e2e8f0;min-width:28px;text-align:right;">0</span>
+        </div>
+      </div>
+
+      <!-- Apply to map -->
+      <button class="btn-generate" id="btn-apply-vectors" style="width:100%;margin-top:8px;">Apply to Map</button>
+    </div>
+  </div>
+  <button id="vector-panel-toggle">Vectors &#9654;</button>
+
+  <div id="satellite-modal" aria-hidden="true">
+    <div class="satellite-modal-card" role="dialog" aria-modal="true" aria-labelledby="satellite-modal-title">
+      <div class="satellite-modal-header">
+        <div>
+          <h2 id="satellite-modal-title">Select Satellite Image</h2>
+          <div id="satellite-modal-summary"></div>
+        </div>
+        <button id="satellite-modal-close" class="satellite-modal-close" type="button">Close</button>
+      </div>
+      <div id="satellite-modal-status" class="status-loading">Set filters and click "Preview Tiles (Optional)".</div>
+      <div id="satellite-results"></div>
+      <div class="satellite-modal-footer">
+        <button id="satellite-modal-cancel" class="btn-secondary" type="button">Cancel</button>
+        <button id="satellite-modal-apply" class="btn-generate" type="button" disabled>Use Selected Image</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
